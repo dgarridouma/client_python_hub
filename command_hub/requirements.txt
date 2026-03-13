@@ -1,5 +1,6 @@
 Flask==3.0.2
-azure-iot-hub==2.6.1
+azure-iot-hub==2.7.0
+six==1.16.0
 
 
 
