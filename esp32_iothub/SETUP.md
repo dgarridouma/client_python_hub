@@ -5,6 +5,8 @@
 - `PubSubClient` by Nick O'Leary
 - `ArduinoJson` by Benoit Blanchon
 
+> `WiFi.h`, `WiFiClientSecure.h` and `time.h` are included with the ESP32 board package — no separate install needed.
+
 ---
 
 ## 1. Connection string
@@ -72,25 +74,60 @@ const char* MQTT_USERNAME = "YOURHUB.azure-devices.net/YOURDEVICE/?api-version=2
 
 ## Sending C2D commands
 
+The device listens for JSON messages that change the telemetry send interval. This matches the Python example behaviour.
+
 **From Azure CLI:**
 
 ```bash
 az iot device c2d-message send \
   --hub-name YOURHUB \
   --device-id YOURDEVICE \
-  --data '{"comando": "led_on"}'
+  --data '{"period": 5, "message": "period changed"}'
 ```
 
 **From Azure Portal:**
 IoT Hub → Devices → your device → **Message to Device** → write JSON in the body.
 
-### Supported commands
+### C2D message format
 
-| JSON message               | Action                |
-|----------------------------|-----------------------|
-| `{"comando": "led_on"}`    | Turn on built-in LED  |
-| `{"comando": "led_off"}`   | Turn off built-in LED |
-| `{"comando": "reiniciar"}` | Restart the ESP32     |
+| Field      | Type   | Description                                      |
+|------------|--------|--------------------------------------------------|
+| `period`   | int    | New telemetry interval in seconds                |
+| `message`  | string | Text printed to Serial (confirmation / label)    |
+
+**Example:**
+```json
+{"period": 3, "message": "faster interval"}
+```
+
+> The device updates `period` immediately on the next loop iteration. No restart needed.
+
+---
+
+## Telemetry payload
+
+The device sends a JSON message on every interval with the following fields, mirroring the Python example:
+
+```json
+{
+  "temperature": 27,
+  "humidity": 65,
+  "pressure": 1012,
+  "when": "2025-01-15T10:30:00Z"
+}
+```
+
+| Field         | Range       | Description                        |
+|---------------|-------------|------------------------------------|
+| `temperature` | 25 – 29     | Simulated temperature (°C)         |
+| `humidity`    | 50 – 99     | Simulated humidity (%)             |
+| `pressure`    | 900 – 1099  | Simulated pressure (hPa)           |
+| `when`        | ISO 8601 UTC| Timestamp from NTP                 |
+
+Serial output format (matches Python `print`):
+```
+27 65 1012
+```
 
 ---
 
@@ -108,3 +145,5 @@ az iot hub monitor-events --hub-name YOURHUB --device-id YOURDEVICE
 - `mqttClient.loop()` in the main loop is critical — without it C2D messages are never received.
 - Avoid long `delay()` calls in `loop()` as they delay incoming command processing.
 - Port **8883** = MQTT over TLS. Port 1883 (unencrypted) is not accepted by Azure.
+- The ESP32 syncs time via NTP on startup (`pool.ntp.org`). The `when` field will be incorrect if NTP sync fails — check Serial output for the sync step.
+- The default send interval is **10 seconds**, matching the Python example. Change it via C2D without reflashing.
